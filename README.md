@@ -29,11 +29,14 @@ This is a tiny chatting program using WebRTC.
 (It's equal to typing "node src/server.js" in command line.)
 
 7. Run HTTP Server
-  1. Python3
-  ```python3 -m http.server 5500```
-  2. Live Server Extension of VS Code
-  [Live Server Extension](https://marketplace.visualstudio.com/items?itemName=ritwickdey.LiveServer)
-  3. And So On...
+  
+    1. Python3
+    ```python3 -m http.server 5500```
+  
+    2. Live Server Extension of VS Code
+    [Live Server Extension](https://marketplace.visualstudio.com/items?itemName=ritwickdey.LiveServer)
+  
+    3. And So On...
 
 7. Open "client.html"
 (e.g., http://localhost:5500/client.html)
