@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebRTC Client</title>
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" />
+    <style type="text/css">
+        body {
+            font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebRTC Client</h1>
+    <div>
+        <button onclick="createDataChannel()">Create Data Channel</button>
+    </div>
+    <div>
+        <button onclick="createOffer()">Create Offer</button>
+    </div>
+    <div>
+        <textarea id="log" rows="10" cols="80"></textarea>
+    </div>
+    <form>
+        <input type="text" id="id" placeholder="Nick Name" />
+        <input type="text" id="message" placeholder="Message" />
+        <button type="submit" onclick="sendMessage(event)">Send</button>
+    </form>
+
+    <script type="text/javascript">
+        let dc;
+
+        // Peer Connection
+        let configuration = {
+            'iceServers': [{
+                'urls': 'stun:stun.l.google.com:19302'
+            }]
+        };
+        let pc = new RTCPeerConnection(configuration);
+        
+        pc.addEventListener('icecandidate', (event) => {
+            if (event.candidate) {
+                console.log('ICE candidate:', event.candidate);
+                sc.send(JSON.stringify(event.candidate));
+            }
+        });
+
+        pc.addEventListener('iceconnectionstatechange', (event) => {
+            console.log('ICE connection state change:', pc.iceConnectionState);
+        });
+
+        pc.addEventListener('icegatheringstatechange', (event) => {
+            console.log('ICE gathering state change:', pc.iceGatheringState);
+        });
+
+        pc.addEventListener('signalingstatechange', (event) => {
+            console.log('Signaling state change:', pc.signalingState);
+        });
+
+        pc.addEventListener('negotiationneeded', (event) => {
+            console.log('Negotiation needed');
+        });
+
+        pc.addEventListener('track', (event) => {
+            console.log('Track:', event.track);
+        });
+
+        // Data Channel (Guest)
+        pc.addEventListener('datachannel', (event) => {
+            console.log('Data channel:', event.channel);
+            dc = event.channel;
+            dc.addEventListener('open', () => {
+                console.log('Data channel open');
+                dc.send('[GUEST] Hello, World!');
+            });
+            dc.addEventListener('message', (event) => {
+                console.log('Data channel message:', event.data);
+                receiveMessage(event.data);
+            });
+        });
+
+        // Signaling
+        let sc = new WebSocket('ws://localhost:8000');
+        
+        sc.addEventListener('open', () => {
+            console.log('WebSocket open');
+        });
+
+        sc.addEventListener('message', (event) => {
+            console.log('WebSocket message:', event.data);
+            let message = JSON.parse(event.data);
+            console.log('Message Type:', message.type);
+            if (message.type === 'offer') {
+                pc.setRemoteDescription(new RTCSessionDescription(message))
+                    .then(function() {
+                        console.log('Remote description:', pc.remoteDescription);
+                        return pc.createAnswer();
+                    })
+                    .then(function(answer) {
+                        console.log('Answer:', answer);
+                        return pc.setLocalDescription(answer);
+                    })
+                    .then(function() {
+                        console.log('Local description:', pc.localDescription);
+                        sc.send(JSON.stringify(pc.localDescription));
+                    })
+                    .catch(function(error) {
+                        console.error('setRemoteDescription error:', error);
+                    });
+            } else if (message.type === 'answer') {
+                pc.setRemoteDescription(new RTCSessionDescription(message))
+                    .then(function() {
+                        console.log('Remote description:', pc.remoteDescription);
+                    })
+                    .catch(function(error) {
+                        console.error('setRemoteDescription error:', error);
+                    });
+            } else if (message.candidate) {
+                pc.addIceCandidate(new RTCIceCandidate(message))
+                    .then(function() {
+                        console.log('ICE candidate:', message);
+                    })
+                    .catch(function(error) {
+                        console.error('addIceCandidate error:', error);
+                    });
+            } else {
+                console.error('Unknown message type:', message.type);
+            }
+        });
+
+        sc.addEventListener('close', () => {
+            console.log('WebSocket close');
+        });
+
+        sc.addEventListener('error', (error) => {
+            console.error('WebSocket error:', error);
+        });
+
+        // Offer
+        async function createOffer() {
+            pc.createOffer()
+                .then(function(offer) {
+                    console.log('Offer:', offer);
+                    return pc.setLocalDescription(offer);
+                })
+                .then(function() {
+                    console.log('Local description:', pc.localDescription);
+                    sc.send(JSON.stringify(pc.localDescription));
+                })
+                .catch(function(error) {
+                    console.error('createOffer error:', error);
+                });    
+        }
+
+        // Data Channel (Host)
+        function createDataChannel(channelName = 'data') {
+            dc = pc.createDataChannel(channelName, {
+                ordered: true,
+                maxPacketLifeTime: 1000
+            });
+
+            dc.addEventListener('open', () => {
+                console.log('Data channel open');
+                dc.send('[HOST] Hello, World!');
+            });
+
+            dc.addEventListener('message', (event) => {
+                console.log('Data channel message:', event.data);
+                receiveMessage(event.data);
+            });
+        }
+
+        // Update Textarea
+        function sendMessage(e) {
+            e.preventDefault();
+            let id = document.getElementById('id').value;
+            let message = document.getElementById('message').value;
+            document.getElementById('log').value += `[${id}] ${message}\n`;
+            dc.send(`[${id}] ${message}`);
+        }
+        function receiveMessage(message) {
+            document.getElementById('log').value += `${message}\n`;
+        }
+    </script>
+</body>
+</html>
